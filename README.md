@@ -88,18 +88,19 @@ unit's **current** HP before the write executes, so the value never changes.
 
 ### 💰 Money editor
 
-Money is stored as a **16-bit little-endian integer** at two HIRAM addresses:
+Money is stored as a **17-bit little-endian integer** at two HIRAM addresses:
 
 ```
-value = hi_byte × 256 + lo_byte     (range: 0 – 65,535)
+value = hi_byte × 65,536 + mi_byte × 256 + lo_byte     range: 0 – 99,999
+
 ```
 
-| Team | Low byte | High byte |
-|---|---|---|
-| Red | `0xFFE6` | `0xFFE7` |
-| White | `0xFFE9` | `0xFFEA` |
+| Team | Low byte | Mid byte | High byte |
+|---|---|---|---|
+| Red | `0xFFE6` | `0xFFE7` | `0xFFE8` |
+| White | `0xFFE9` | `0xFFEA` | `0xFFEB`|
 
-**Example:** `FFE9 = 0xF0`, `FFEA = 0x55` → `0x55 × 256 + 0xF0 = 22,000`
+**Example:** `FFE9 = 0xF0`, `FFEA = 0x55`, `FFEB = 0x00` → `0x55 × 256 + 0xF0 = 22,000`
 
 **Controls:**
 - **Preset buttons** — instant ±1K / ±5K / ±10K
@@ -108,6 +109,33 @@ value = hi_byte × 256 + lo_byte     (range: 0 – 65,535)
 - Press **Enter** in the input field to trigger Apply
 
 ---
+
+# Free Money Cheat
+
+Instead of patching the game's money subtraction routine (which affects
+both player and CPU), the tool uses a memory correction strategy.
+
+Each frame:
+
+1.  The current money value is read.
+2.  If the value decreased while the cheat is active
+3.  The previous value is restored.
+
+Pseudo-logic:
+
+current = read_money()
+
+if cheat_enabled and current \< last_value: write_money(last_value)
+else: last_value = current
+
+Advantages:
+
+-   affects only the selected team
+-   does not modify game logic
+-   stable across purchases and income events
+
+------------------------------------------------------------------------
+
 
 ## Project structure
 

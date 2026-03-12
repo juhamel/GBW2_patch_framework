@@ -1,8 +1,5 @@
-Find Flag whos turn it is
-
 
 Fix small bug in Invincibility - sometimes a unit gets +3 HP
-Use this flag to disable combat/dying animation for invincible team
-
+Fix animation for whites invincibilty when it is whites turn. logic works though
 
 Add more Cheats:

@@ -28,6 +28,11 @@ from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 from typing import Optional
 
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -74,20 +79,37 @@ KEY_MAP = {
 # ---------------------------------------------------------------------------
 # InvincibilityManager
 # ---------------------------------------------------------------------------
+
 _RED_HP_ADDRS   = frozenset(0xC988 + i * 0x10 for i in range(41))
 _WHITE_HP_ADDRS = frozenset(0xCC18 + i * 0x10 for i in range(41))
+
 _INVINC_HOOK_BANK = 0
 _INVINC_HOOK_ADDR = 0x3A81
 
+_TURN_ADDR        = 0xC4D3   # 1 = Red's turn, 0 = White's turn
+_HOOK_BANK        = 4
+
+_HOOK_ADDR_A      = 0x6190   # Load 0xC60C into A under matching-team invincibility
+_HOOK_ADDR_B      = 0x6199   # Load 0xC614 into A under opposing-team invincibility
+
+_RAM_LOAD_ADDR_A  = 0xC60C
+_RAM_LOAD_ADDR_B  = 0xC614
 
 class InvincibilityManager:
     """
-    Hooks bank=0 addr=0x3A81 (LD [DE], A — the HP write-back instruction).
-    If DE points at a unit belonging to an invincible team, A is replaced
-    with the unit's current HP so the write becomes a no-op.
+    Manages three hooks to implement per-team invincibility.
 
-    PyBoy calls  callback(context)  where context = pyboy.register_file.
-    Memory access uses self._pyboy stored at registration time.
+    Hook 1 — bank=0 0x3A81 (LD [DE], A — HP write-back):
+        If DE points at a unit of an invincible team, A is replaced with
+        the current HP value so the write becomes a no-op.
+
+    Hook 2 — bank=13 0x6190:
+        If the active team is invincible (red's turn + red invincible, or
+        white's turn + white invincible), loads RAM[0xC60C] into A.
+
+    Hook 3 — bank=13 0x6199:
+        If the *opposing* team is invincible (red's turn + white invincible,
+        or white's turn + red invincible), loads RAM[0xC614] into A.
     """
 
     def __init__(self):
@@ -96,35 +118,105 @@ class InvincibilityManager:
         self._registered:      bool = False
         self._pyboy                  = None
 
+    # ------------------------------------------------------------------
+    # Registration
+    # ------------------------------------------------------------------
+
     def register(self, pyboy) -> None:
         if self._registered:
             return
         self._pyboy = pyboy
+
         pyboy.hook_register(
             _INVINC_HOOK_BANK,
             _INVINC_HOOK_ADDR,
             self._callback,
             context=pyboy.register_file,
         )
-        self._registered = True
         logger.info(
             "Invincibility hook registered at bank=%d addr=0x%04X",
             _INVINC_HOOK_BANK, _INVINC_HOOK_ADDR,
         )
 
+        pyboy.hook_register(
+            _HOOK_BANK,
+            _HOOK_ADDR_A,
+            self._callback_6190,
+            context=pyboy.register_file,
+        )
+        logger.info(
+            "Invincibility hook registered at bank=%d addr=0x%04X",
+            _HOOK_BANK, _HOOK_ADDR_A,
+        )
+
+        pyboy.hook_register(
+            _HOOK_BANK,
+            _HOOK_ADDR_B,
+            self._callback_6199,
+            context=pyboy.register_file,
+        )
+        logger.info(
+            "Invincibility hook registered at bank=%d addr=0x%04X",
+            _HOOK_BANK, _HOOK_ADDR_B,
+        )
+
+        self._registered = True
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _is_red_turn(self) -> bool:
+        """Returns True when 0xC4D3 == 0 (Red's turn)."""
+        return self._pyboy.memory[_TURN_ADDR] == 0
+
+    # ------------------------------------------------------------------
+    # Callbacks
+    # ------------------------------------------------------------------
+
     def _callback(self, register_file) -> None:
+        """Hook 1 — suppress HP write-back for invincible units."""
         if self._pyboy is None:
             return
         de = (register_file.D << 8) | register_file.E
-
         if de in _RED_HP_ADDRS and self.red_invincible:
             register_file.A = self._pyboy.memory[de]
             logger.debug("Invincibility: blocked Red HP write DE=0x%04X", de)
-
         elif de in _WHITE_HP_ADDRS and self.white_invincible:
             register_file.A = self._pyboy.memory[de]
             logger.debug("Invincibility: blocked White HP write DE=0x%04X", de)
 
+    def _callback_6190(self, register_file) -> None:
+        """
+        Hook 2 — active-team invincibility.
+        Fires at bank=13 0x6190.
+        Loads RAM[0xC60C] into A when the team whose turn it is is invincible.
+        """
+        if self._pyboy is None:
+            return
+        red_turn = self._is_red_turn()
+        if (red_turn and self.red_invincible) or (not red_turn and self.white_invincible):
+            register_file.A = self._pyboy.memory[_RAM_LOAD_ADDR_A]
+            logger.debug(
+                "Hook 0x6190: loaded RAM[0x%04X]=0x%02X into A (red_turn=%s)",
+                _RAM_LOAD_ADDR_A, register_file.A, red_turn,
+            )
+
+    def _callback_6199(self, register_file) -> None:
+        """
+        Hook 3 — opposing-team invincibility.
+        Fires at bank=13 0x6199.
+        Loads RAM[0xC614] into A when the team *not* taking its turn is invincible.
+        """
+        if self._pyboy is None:
+            return
+        red_turn = self._is_red_turn()
+        if (red_turn and self.white_invincible) or (not red_turn and self.red_invincible):
+            register_file.A = self._pyboy.memory[_RAM_LOAD_ADDR_B]
+            logger.debug(
+                "Hook 0x6199: loaded RAM[0x%04X]=0x%02X into A (red_turn=%s)",
+                _RAM_LOAD_ADDR_B, register_file.A, red_turn,
+            )
 
 # ---------------------------------------------------------------------------
 # InvincibilityCard widget
@@ -196,15 +288,17 @@ class TeamMoneyCard(tk.Frame):
     Interactive money editor for one team.
 
     Memory layout — 16-bit little-endian:
-      value = hi_byte * 256 + lo_byte   (max 65,535)
+      value = hi_byte * 65,536 + mi_byte * 256 + lo_byte   (max 99,999)
 
-      Red  : lo=0xFFE6  hi=0xFFE7
-      White: lo=0xFFE9  hi=0xFFEA
+      Red  : lo=0xFFE6  mi=0xFFE7  hi=0xFFE8
+      White: lo=0xFFE9  mi=0xFFEA  hi=0xFFEB
+      
+      hi_byte can either be 00 or 01
 
     Example: FFE9=0xF0, FFEA=0x55 → 0x55*256 + 0xF0 = 22,000
     """
 
-    MAX_VAL = 0xFFFF
+    MAX_VAL = 99_999
     PRESETS = [
         ("+1K",   +1_000),
         ("+5K",   +5_000),
@@ -215,11 +309,12 @@ class TeamMoneyCard(tk.Frame):
     ]
 
     def __init__(self, parent, team_name: str, color: str,
-                 addr_lo: int, addr_hi: int, get_emulator, **kwargs):
+                 addr_lo: int, addr_mi: int, addr_hi: int, get_emulator, **kwargs):
         super().__init__(parent, bg=CARD_BG, **kwargs)
         self._team    = team_name
         self._color   = color
         self._addr_lo = addr_lo
+        self._addr_mi = addr_mi
         self._addr_hi = addr_hi
         self._get_emu = get_emulator
         self._mode    = tk.StringVar(value="add")
@@ -305,13 +400,15 @@ class TeamMoneyCard(tk.Frame):
 
     def _read(self, pyboy) -> int:
         lo = pyboy.memory[self._addr_lo]
+        mi = pyboy.memory[self._addr_mi]
         hi = pyboy.memory[self._addr_hi]
-        return hi * 256 + lo
+        return hi * 65_536 + mi * 256 + lo
 
     def _write(self, pyboy, value: int) -> int:
         value = max(0, min(value, self.MAX_VAL))
         pyboy.memory[self._addr_lo] = value & 0xFF
-        pyboy.memory[self._addr_hi] = (value >> 8) & 0xFF
+        pyboy.memory[self._addr_mi] = (value >> 8) & 0xFF
+        pyboy.memory[self._addr_hi] = (value >> 16) & 0xFF
         return value
 
     def _apply_delta(self, delta: int):
@@ -363,6 +460,149 @@ class TeamMoneyCard(tk.Frame):
             except Exception:
                 pass
 
+    
+# ---------------------------------------------------------------------------
+# MoneyLockManager
+# ---------------------------------------------------------------------------
+
+_MONEY_HOOK_BANK = 0
+_MONEY_SUB_ADDRS = (0x750B, 0x750E, 0x7511)
+
+_RED_MONEY  = (0xFFE6, 0xFFE7, 0xFFE8)
+_WHITE_MONEY = (0xFFE9, 0xFFEA, 0xFFEB)
+
+
+class MoneyLockManager:
+    """
+    Manages the “Free Money” cheat by monitoring and correcting the in-RAM
+    money values for both teams.
+
+    The Game Boy game stores the current money values in HRAM as a 3-byte
+    little-endian integer per team:
+
+        Red team:   FFE6, FFE7, FFE8
+        White team: FFE9, FFEA, FFEB
+
+    Instead of patching the game's subtraction routine (which would affect
+    both the player and the CPU), this manager observes the money values
+    once per frame and restores them if they decrease while the cheat is
+    enabled.
+
+    Mechanism
+    ---------
+    For each team the manager stores the last known money value. During each
+    update:
+
+        1. The current money value is read from HRAM.
+        2. If the cheat is active and the value decreased since the last
+        frame, the previous value is written back.
+        3. Otherwise the stored reference value is updated.
+
+    This effectively prevents money from decreasing while still allowing
+    normal increases (income, bonuses, etc.).
+    """
+    def __init__(self):
+        self.red_free_money = False
+        self.white_free_money = False
+        self._pyboy = None
+        self._last_red = 0
+        self._last_white = 0
+
+    def register(self, pyboy):
+        self._pyboy = pyboy
+        self._last_red = self._read_money(_RED_MONEY)
+        self._last_white = self._read_money(_WHITE_MONEY)
+
+    def protect(self):
+        if not self._pyboy:
+            return
+
+        current_red = self._read_money(_RED_MONEY)
+        if self.red_free_money:
+            if current_red < self._last_red:
+                self._write_money(_RED_MONEY, self._last_red)
+                current_red = self._last_red
+        self._last_red = current_red
+
+        current_white = self._read_money(_WHITE_MONEY)
+        if self.white_free_money:
+            if current_white < self._last_white:
+                self._write_money(_WHITE_MONEY, self._last_white)
+                current_white = self._last_white
+        self._last_white = current_white
+
+    def _read_money(self, addrs):
+        lo, mi, hi = addrs
+        m = self._pyboy.memory
+        return m[lo] | (m[mi] << 8) | (m[hi] << 16)
+
+    def _write_money(self, addrs, value):
+        lo, mi, hi = addrs
+        m = self._pyboy.memory
+        m[lo] = value & 0xFF
+        m[mi] = (value >> 8) & 0xFF
+        m[hi] = (value >> 16) & 0xFF
+
+# ---------------------------------------------------------------------------
+# MoneyLockCard widget
+# ---------------------------------------------------------------------------
+
+class MoneyLockCard(tk.Frame):
+    """Per-team MoneyLock toggle card."""
+
+    def __init__(self, parent, manager: MoneyLockManager, **kwargs):
+        super().__init__(parent, bg=CARD_BG, **kwargs)
+        self._mgr       = manager
+        self._red_var   = tk.BooleanVar(value=False)
+        self._white_var = tk.BooleanVar(value=False)
+        self._build()
+
+    def _build(self):
+        self.config(pady=8, padx=10)
+
+        hdr = tk.Frame(self, bg=CARD_BG)
+        hdr.pack(fill="x")
+        tk.Label(
+            hdr, text="💰  MoneyLocking",
+            font=("Segoe UI", 10, "bold"),
+            bg=CARD_BG, fg="#a78bfa",
+        ).pack(side="left")
+
+        btn_row = tk.Frame(self, bg=CARD_BG)
+        btn_row.pack(fill="x", pady=(8, 0))
+        for label, var, color, attr in [
+            ("Red Free Money", self._red_var, "#e94560", "red_free_money"),
+            ("White Free Money", self._white_var, "#aabbdd", "white_free_money"),
+        ]:
+            self._make_toggle(btn_row, label, var, color, attr)
+
+        tk.Frame(self, bg=BORDER, height=1).pack(fill="x", pady=(8, 0))
+
+    def _make_toggle(self, parent, label, var, color, attr):
+        frame = tk.Frame(parent, bg=CARD_BG)
+        frame.pack(side="left", padx=(0, 8))
+
+        def _toggle():
+            state = var.get()
+            setattr(self._mgr, attr, state)
+            btn.config(
+                text=f"● {label}" if state else f"○ {label}",
+                bg="#1a2a1a" if state else CARD_BG,
+                fg=color if state else TEXT_DISABLED,
+            )
+            logger.info("MoneyLock %s: %s", label, "ON" if state else "OFF")
+
+        btn = tk.Checkbutton(
+            frame, text=f"○ {label}",
+            variable=var, command=_toggle,
+            font=("Segoe UI", 9, "bold"),
+            bg=CARD_BG, fg=TEXT_DISABLED,
+            activebackground=CARD_BG, activeforeground=color,
+            selectcolor=DARK_BG, indicatoron=False,
+            relief="flat", padx=10, pady=5, cursor="hand2",
+        )
+        btn.pack()
+
 
 # ---------------------------------------------------------------------------
 # Main Application Window
@@ -395,6 +635,8 @@ class GBCPatcherApp(tk.Tk):
         self._invinc_manager              = InvincibilityManager()
         self._invinc_card: Optional[InvincibilityCard] = None
         self._invinc_card_visible         = False
+
+        self._money_manager = MoneyLockManager()
 
         self._fps_frames  = 0
         self._fps_last    = time.perf_counter()
@@ -493,19 +735,28 @@ class GBCPatcherApp(tk.Tk):
             self._patch_list_frame, manager=self._invinc_manager,
         )
 
+        self._money_lock_card = MoneyLockCard(
+            self._patch_list_frame, self._money_manager
+        )
+        if not self._invinc_card_visible:
+            self._invinc_card.pack(fill="x", padx=4, pady=(4, 2))
+            self._invinc_card_visible = True
+
+            self._money_lock_card.pack(fill="x", padx=4, pady=(4, 2))
+        
         # Money cards
         get_emu = lambda: self._emulator
         self._team_cards = [
             TeamMoneyCard(
                 self._patch_list_frame,
                 team_name="Red",   color="#e94560",
-                addr_lo=0xFFE6,    addr_hi=0xFFE7,
+                addr_lo=0xFFE6,    addr_mi=0xFFE7,  addr_hi=0xFFE8,
                 get_emulator=get_emu,
             ),
             TeamMoneyCard(
                 self._patch_list_frame,
                 team_name="White", color="#aabbdd",
-                addr_lo=0xFFE9,    addr_hi=0xFFEA,
+                addr_lo=0xFFE9,    addr_mi=0xFFEA,  addr_hi=0xFFEB,
                 get_emulator=get_emu,
             ),
         ]
@@ -620,6 +871,8 @@ class GBCPatcherApp(tk.Tk):
 
         self._invinc_manager.register(self._emulator._pyboy)
 
+        self._money_manager.register(self._emulator._pyboy)
+
         if not self._invinc_card_visible:
             self._invinc_card.pack(fill="x", padx=4, pady=(4, 2))
             self._invinc_card_visible = True
@@ -644,6 +897,7 @@ class GBCPatcherApp(tk.Tk):
                 self._emulator = None
                 return
             self._render_frame()
+            self._money_manager.protect() 
             self._update_fps()
             if self._team_cards_visible:
                 for card in self._team_cards:
