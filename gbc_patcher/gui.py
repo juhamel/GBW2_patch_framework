@@ -602,6 +602,153 @@ class MoneyLockCard(tk.Frame):
 
 
 # ---------------------------------------------------------------------------
+# InfiniteMovesManager
+# ---------------------------------------------------------------------------
+
+_MOVES_HOOK_BANK = 0
+_MOVES_HOOK_ADDR = 0x1C1E   # 00:1C1C: SET 0, (HL) — marks unit as having moved - we will reset it afterwards -> hook on next instruction
+_MOVES_FLAG_ADDR = 0xC4D6
+
+_RED_MOVES_ADDRS   = frozenset(0xC983 + i * 0x10 for i in range(41))
+_WHITE_MOVES_ADDRS = frozenset(0xCC13 + i * 0x10 for i in range(41))
+
+_FLAG_MOVED   = 0x03
+_FLAG_UNMOVED = 0x02
+
+class InfiniteMovesManager:
+    """
+    Hooks bank=0 addr=0x1C1C (SET 0, (HL) — sets the 'unit has moved' flag).
+    If infinite moves is enabled for the active team, the flag byte at
+    0xC4D6 is immediately restored to 0x02 after the instruction fires.
+    When the cheat is toggled on, any existing 0x03 values in the unit
+    address range are also reset to 0x02.
+    """
+
+    def __init__(self):
+        self._red_infinite_moves:   bool = False
+        self._white_infinite_moves: bool = False
+        self._registered:           bool = False
+        self._pyboy                      = None
+
+    @property
+    def red_infinite_moves(self) -> bool:
+        return self._red_infinite_moves
+
+    @red_infinite_moves.setter
+    def red_infinite_moves(self, value: bool) -> None:
+        self._red_infinite_moves = value
+        if value and self._pyboy is not None:
+            self._reset_existing_flags(_RED_MOVES_ADDRS, "Red")
+
+    @property
+    def white_infinite_moves(self) -> bool:
+        return self._white_infinite_moves
+
+    @white_infinite_moves.setter
+    def white_infinite_moves(self, value: bool) -> None:
+        self._white_infinite_moves = value
+        if value and self._pyboy is not None:
+            self._reset_existing_flags(_WHITE_MOVES_ADDRS, "White")
+
+    def register(self, pyboy) -> None:
+        if self._registered:
+            return
+        self._pyboy = pyboy
+        pyboy.hook_register(
+            _MOVES_HOOK_BANK,
+            _MOVES_HOOK_ADDR,
+            self._callback,
+            context=pyboy.register_file,
+        )
+        self._registered = True
+        logger.info(
+            "Infinite moves hook registered at bank=%d addr=0x%04X",
+            _MOVES_HOOK_BANK, _MOVES_HOOK_ADDR,
+        )
+
+    def _reset_existing_flags(self, addrs: frozenset, team: str) -> None:
+        """Scan unit addresses and reset any existing 0x03 flags to 0x02."""
+        count = 0
+        for addr in addrs:
+            if self._pyboy.memory[addr] == _FLAG_MOVED:
+                self._pyboy.memory[addr] = _FLAG_UNMOVED
+                count += 1
+        logger.debug(
+            "Infinite moves: reset %d existing flags for %s team", count, team
+        )
+
+    def _callback(self, register_file) -> None:
+        if self._pyboy is None:
+            return
+        red_turn = self._pyboy.memory[_TURN_ADDR] == 0
+        if (red_turn and self._red_infinite_moves) or \
+           (not red_turn and self._white_infinite_moves):
+            self._pyboy.memory[_MOVES_FLAG_ADDR] = _FLAG_UNMOVED
+            logger.debug(
+                "Infinite moves: restored flag to 0x%02X at 0x%04X (red_turn=%s)",
+                _FLAG_UNMOVED, _MOVES_FLAG_ADDR, red_turn,
+            )
+
+# ---------------------------------------------------------------------------
+# InfiniteMovesCard widget
+# ---------------------------------------------------------------------------
+
+class InfiniteMovesCard(tk.Frame):
+    """Per-team infinite moves toggle card."""
+
+    def __init__(self, parent, manager: InfiniteMovesManager, **kwargs):
+        super().__init__(parent, bg=CARD_BG, **kwargs)
+        self._mgr       = manager
+        self._red_var   = tk.BooleanVar(value=False)
+        self._white_var = tk.BooleanVar(value=False)
+        self._build()
+
+    def _build(self):
+        self.config(pady=8, padx=10)
+
+        hdr = tk.Frame(self, bg=CARD_BG)
+        hdr.pack(fill="x")
+        tk.Label(
+            hdr, text="♾  Infinite Moves",
+            font=("Segoe UI", 10, "bold"),
+            bg=CARD_BG, fg="#34d399",
+        ).pack(side="left")
+
+        btn_row = tk.Frame(self, bg=CARD_BG)
+        btn_row.pack(fill="x", pady=(8, 0))
+        for label, var, color, attr in [
+            ("Red Team",   self._red_var,   "#e94560", "red_infinite_moves"),
+            ("White Team", self._white_var, "#aabbdd", "white_infinite_moves"),
+        ]:
+            self._make_toggle(btn_row, label, var, color, attr)
+
+        tk.Frame(self, bg=BORDER, height=1).pack(fill="x", pady=(8, 0))
+
+    def _make_toggle(self, parent, label, var, color, attr):
+        frame = tk.Frame(parent, bg=CARD_BG)
+        frame.pack(side="left", padx=(0, 8))
+
+        def _toggle():
+            state = var.get()
+            setattr(self._mgr, attr, state)
+            btn.config(
+                text=f"● {label}" if state else f"○ {label}",
+                bg="#1a2a1a" if state else CARD_BG,
+                fg=color if state else TEXT_DISABLED,
+            )
+            logger.info("InfiniteMoves %s: %s", label, "ON" if state else "OFF")
+
+        btn = tk.Checkbutton(
+            frame, text=f"○ {label}",
+            variable=var, command=_toggle,
+            font=("Segoe UI", 9, "bold"),
+            bg=CARD_BG, fg=TEXT_DISABLED,
+            activebackground=CARD_BG, activeforeground=color,
+            selectcolor=DARK_BG, indicatoron=False,
+            relief="flat", padx=10, pady=5, cursor="hand2",
+        )
+        btn.pack()
+# ---------------------------------------------------------------------------
 # Main Application Window
 # ---------------------------------------------------------------------------
 
@@ -634,6 +781,9 @@ class GBCPatcherApp(tk.Tk):
         self._invinc_card_visible         = False
 
         self._money_manager = MoneyLockManager()
+
+        self._moves_manager = InfiniteMovesManager()
+        self._moves_card: Optional[InfiniteMovesCard] = None
 
         self._fps_frames  = 0
         self._fps_last    = time.perf_counter()
@@ -758,6 +908,11 @@ class GBCPatcherApp(tk.Tk):
             ),
         ]
 
+        self._moves_card = InfiniteMovesCard(
+            self._patch_list_frame, manager=self._moves_manager,
+        )
+        self._moves_card.pack(fill="x", padx=4, pady=(4, 2))
+
         self._build_controls()
 
     def _build_controls(self):
@@ -869,6 +1024,8 @@ class GBCPatcherApp(tk.Tk):
         self._invinc_manager.register(self._emulator._pyboy)
 
         self._money_manager.register(self._emulator._pyboy)
+
+        self._moves_manager.register(self._emulator._pyboy)
 
         if not self._invinc_card_visible:
             self._invinc_card.pack(fill="x", padx=4, pady=(4, 2))
