@@ -92,8 +92,8 @@ _HOOK_BANK        = 4
 _HOOK_ADDR_A      = 0x6190   # Load 0xC60C into A under matching-team invincibility
 _HOOK_ADDR_B      = 0x6199   # Load 0xC614 into A under opposing-team invincibility
 
-_RAM_LOAD_ADDR_A  = 0xC60C
-_RAM_LOAD_ADDR_B  = 0xC614
+_RAM_LOAD_ADDR_RED  = 0xC60C
+_RAM_LOAD_ADDR_WHITE  = 0xC614
 
 class InvincibilityManager:
     """
@@ -185,39 +185,36 @@ class InvincibilityManager:
         elif de in _WHITE_HP_ADDRS and self.white_invincible:
             register_file.A = self._pyboy.memory[de]
             logger.debug("Invincibility: blocked White HP write DE=0x%04X", de)
-
+    
     def _callback_6190(self, register_file) -> None:
         """
-        Hook 2 — active-team invincibility.
-        Fires at bank=13 0x6190.
-        Loads RAM[0xC60C] into A when the team whose turn it is is invincible.
+        Hook 2 — Red team invincibility.
+        Fires at bank=4 addr=0x6190.
+        Loads RAM[0xC60C] into A when red is invincible.
         """
         if self._pyboy is None:
             return
-        red_turn = self._is_red_turn()
-        if (red_turn and self.red_invincible) or (not red_turn and self.white_invincible):
-            register_file.A = self._pyboy.memory[_RAM_LOAD_ADDR_A]
+        if self.red_invincible:
+            register_file.A = self._pyboy.memory[_RAM_LOAD_ADDR_RED]
             logger.debug(
-                "Hook 0x6190: loaded RAM[0x%04X]=0x%02X into A (red_turn=%s)",
-                _RAM_LOAD_ADDR_A, register_file.A, red_turn,
+                "Hook 0x6190: loaded RAM[0x%04X]=0x%02X into A",
+                _RAM_LOAD_ADDR_RED, register_file.A,
             )
 
     def _callback_6199(self, register_file) -> None:
         """
-        Hook 3 — opposing-team invincibility.
-        Fires at bank=13 0x6199.
-        Loads RAM[0xC614] into A when the team *not* taking its turn is invincible.
+        Hook 3 — White team invincibility.
+        Fires at bank=4 addr=0x6199.
+        Loads RAM[0xC614] into A when white is invincible.
         """
         if self._pyboy is None:
             return
-        red_turn = self._is_red_turn()
-        if (red_turn and self.white_invincible) or (not red_turn and self.red_invincible):
-            register_file.A = self._pyboy.memory[_RAM_LOAD_ADDR_B]
+        if self.white_invincible:
+            register_file.A = self._pyboy.memory[_RAM_LOAD_ADDR_WHITE]
             logger.debug(
-                "Hook 0x6199: loaded RAM[0x%04X]=0x%02X into A (red_turn=%s)",
-                _RAM_LOAD_ADDR_B, register_file.A, red_turn,
+                "Hook 0x6199: loaded RAM[0x%04X]=0x%02X into A",
+                _RAM_LOAD_ADDR_WHITE, register_file.A,
             )
-
 # ---------------------------------------------------------------------------
 # InvincibilityCard widget
 # ---------------------------------------------------------------------------
