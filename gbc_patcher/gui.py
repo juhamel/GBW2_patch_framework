@@ -749,6 +749,147 @@ class InfiniteMovesCard(tk.Frame):
         )
         btn.pack()
 # ---------------------------------------------------------------------------
+# InstantCaptureManager
+# ---------------------------------------------------------------------------
+
+_CAPTURE_HOOK_BANK = 1
+_CAPTURE_HOOK_ADDR = 0x6C65   # LD C, A — loads A into C during base-capture logic
+
+class InstantCaptureManager:
+    """
+    Hooks bank=1 addr=0x6C65 (SUB C — subtracts register C from A during
+    the base-capture progress routine).
+
+    When Instant Capture is enabled for the active team, register C is set
+    to the current value of A before the instruction fires, so the result
+    of A - C is always 0, which the game interprets as a fully-captured base.
+
+    Turn detection uses the same _TURN_ADDR flag as the other managers:
+        0x00 → Red's turn
+        non-zero → White's turn
+    """
+
+    def __init__(self):
+        self._red_instant_capture:   bool = False
+        self._white_instant_capture: bool = False
+        self._registered:            bool = False
+        self._pyboy                       = None
+
+    @property
+    def red_instant_capture(self) -> bool:
+        return self._red_instant_capture
+
+    @red_instant_capture.setter
+    def red_instant_capture(self, value: bool) -> None:
+        self._red_instant_capture = value
+        logger.info("Instant Capture Red: %s", "ON" if value else "OFF")
+
+    @property
+    def white_instant_capture(self) -> bool:
+        return self._white_instant_capture
+
+    @white_instant_capture.setter
+    def white_instant_capture(self, value: bool) -> None:
+        self._white_instant_capture = value
+        logger.info("Instant Capture White: %s", "ON" if value else "OFF")
+
+    def register(self, pyboy) -> None:
+        if self._registered:
+            return
+        self._pyboy = pyboy
+        pyboy.hook_register(
+            _CAPTURE_HOOK_BANK,
+            _CAPTURE_HOOK_ADDR,
+            self._callback,
+            context=pyboy.register_file,
+        )
+        self._registered = True
+        logger.info(
+            "Instant capture hook registered at bank=%d addr=0x%04X",
+            _CAPTURE_HOOK_BANK, _CAPTURE_HOOK_ADDR,
+        )
+
+    def _callback(self, register_file) -> None:
+        """
+        Fires at bank=1 0x6C65 (SUB C).
+        If instant capture is enabled for the active team, set C = A so
+        that the subtraction A - C always yields 0, causing the game to
+        treat the base as instantly captured.
+        """
+        if self._pyboy is None:
+            return
+        red_turn = self._pyboy.memory[_TURN_ADDR] == 0
+        if (red_turn and self._red_instant_capture) or \
+           (not red_turn and self._white_instant_capture):
+            register_file.C = register_file.A
+            logger.debug(
+                "Instant capture: set C=A (0x%02X) at 0x%04X (red_turn=%s)",
+                register_file.A, _CAPTURE_HOOK_ADDR, red_turn,
+            )
+
+
+# ---------------------------------------------------------------------------
+# InstantCaptureCard widget
+# ---------------------------------------------------------------------------
+
+class InstantCaptureCard(tk.Frame):
+    """Per-team instant capture toggle card."""
+
+    def __init__(self, parent, manager: InstantCaptureManager, **kwargs):
+        super().__init__(parent, bg=CARD_BG, **kwargs)
+        self._mgr       = manager
+        self._red_var   = tk.BooleanVar(value=False)
+        self._white_var = tk.BooleanVar(value=False)
+        self._build()
+
+    def _build(self):
+        self.config(pady=8, padx=10)
+
+        hdr = tk.Frame(self, bg=CARD_BG)
+        hdr.pack(fill="x")
+        tk.Label(
+            hdr, text="🏴  Instant Capture",
+            font=("Segoe UI", 10, "bold"),
+            bg=CARD_BG, fg="#fb923c",
+        ).pack(side="left")
+
+        btn_row = tk.Frame(self, bg=CARD_BG)
+        btn_row.pack(fill="x", pady=(8, 0))
+        for label, var, color, attr in [
+            ("Red Team",   self._red_var,   "#e94560", "red_instant_capture"),
+            ("White Team", self._white_var, "#aabbdd", "white_instant_capture"),
+        ]:
+            self._make_toggle(btn_row, label, var, color, attr)
+
+        tk.Frame(self, bg=BORDER, height=1).pack(fill="x", pady=(8, 0))
+
+    def _make_toggle(self, parent, label, var, color, attr):
+        frame = tk.Frame(parent, bg=CARD_BG)
+        frame.pack(side="left", padx=(0, 8))
+
+        def _toggle():
+            state = var.get()
+            setattr(self._mgr, attr, state)
+            btn.config(
+                text=f"● {label}" if state else f"○ {label}",
+                bg="#1a2a1a" if state else CARD_BG,
+                fg=color if state else TEXT_DISABLED,
+            )
+            logger.info("InstantCapture %s: %s", label, "ON" if state else "OFF")
+
+        btn = tk.Checkbutton(
+            frame, text=f"○ {label}",
+            variable=var, command=_toggle,
+            font=("Segoe UI", 9, "bold"),
+            bg=CARD_BG, fg=TEXT_DISABLED,
+            activebackground=CARD_BG, activeforeground=color,
+            selectcolor=DARK_BG, indicatoron=False,
+            relief="flat", padx=10, pady=5, cursor="hand2",
+        )
+        btn.pack()
+
+
+# ---------------------------------------------------------------------------
 # Main Application Window
 # ---------------------------------------------------------------------------
 
@@ -784,6 +925,9 @@ class GBCPatcherApp(tk.Tk):
 
         self._moves_manager = InfiniteMovesManager()
         self._moves_card: Optional[InfiniteMovesCard] = None
+
+        self._capture_manager = InstantCaptureManager()
+        self._capture_card: Optional[InstantCaptureCard] = None
 
         self._fps_frames  = 0
         self._fps_last    = time.perf_counter()
@@ -913,6 +1057,11 @@ class GBCPatcherApp(tk.Tk):
         )
         self._moves_card.pack(fill="x", padx=4, pady=(4, 2))
 
+        self._capture_card = InstantCaptureCard(
+            self._patch_list_frame, manager=self._capture_manager,
+        )
+        self._capture_card.pack(fill="x", padx=4, pady=(4, 2))
+
         self._build_controls()
 
     def _build_controls(self):
@@ -1026,6 +1175,8 @@ class GBCPatcherApp(tk.Tk):
         self._money_manager.register(self._emulator._pyboy)
 
         self._moves_manager.register(self._emulator._pyboy)
+
+        self._capture_manager.register(self._emulator._pyboy)
 
         if not self._invinc_card_visible:
             self._invinc_card.pack(fill="x", padx=4, pady=(4, 2))
