@@ -1,0 +1,83 @@
+\documentclass[conference,dvipsnames]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algpseudocode}
+\usepackage{graphicx}
+\ifCLASSOPTIONcompsoc
+  \usepackage[caption=false,font=normalsize,labelfont=sf,textfont=sf]{subfig}
+\else
+  \usepackage[caption=false,font=footnotesize]{subfig}
+\fi
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{todonotes}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{tikz}
+\usetikzlibrary{trees, matrix, positioning, patterns, shapes, shadows, shapes.arrows, arrows.meta, shapes.multipart, decorations.pathreplacing, calc, tikzmark, shapes.geometric}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+\usepackage{pgf-pie}
+\usepackage[binary-units]{siunitx}
+\usepackage{mathdots}
+\usepackage{mathtools}
+\usepackage{bm}
+\usepackage[colorlinks=true, linkcolor=black, urlcolor=NavyBlue, citecolor=black]{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\lstdefinestyle{shell}{
+	backgroundcolor=\color{gray!10},
+	basicstyle=\ttfamily\small,
+	frame=single,
+	framerule=0.4pt,
+	rulecolor=\color{gray!40},
+	breaklines=true,
+	captionpos=b,
+}
+\usepackage{xcolor}
+
+\definecolor{addrcolor}{RGB}{0, 110, 110}
+
+\newcommand{\addr}[1]{\texttt{\textcolor{addrcolor}{0x#1}}}
+\newcommand{\dmp}[1]{\texttt{\textcolor{addrcolor}{#1}}}
+
+\newcommand{\MatVal}[1]{\bm{\mathit{#1}}}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{Binary Hacking: Cheats for Game Boy Wars 2}
+
+\author{
+\IEEEauthorblockN{Thomas Hetebrüg, Leah Ludwig, Julius Hamel}
+\IEEEauthorblockA{\textit{Beginner's Practical, B.Sc. Computer Science} \\
+\textit{Heidelberg University, Germany}\\
+sw322@stud.uni-heidelberg.de, leah.ludwig@stud.uni-heidelberg.de, julius.hamel@stud.uni-heidelberg.de}
+}
+
+\maketitle
+
+\begin{abstract}
+	Game Boy Wars 2 is a turn-based strategy game, which was published in 1998 for the Game Boy Color.
+	While Game Boy Wars 2 was only released in Japan, we found an English community translation ROM online, which we used to learn the games mechanics and write cheats for it. \footnote{https://romsfun.com/roms/game-boy-color/game-boy-wars-2.html}
+	For the easy appliance of the cheats, we wrote a python framework using pyboy, which grants the player a graphical user interface (GUI) to select wanted cheats.
+	This framework has been uploaded to github.\footnote{https://github.com/juhamel/GBW2\_patch\_framework}
+\end{abstract}
+
+% \begin{IEEEkeywords}
+% component, formatting, style, styling, insert
+% \end{IEEEkeywords}
+
+\input{01-question01}
+\input{02-question02}
+\input{03-question03}
+
+\clearpage
+%\input{appendix.tex}
+
+
+\end{document}

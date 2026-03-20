@@ -1,0 +1,76 @@
+\section{General Gameplay and Memory Mechanics}
+
+\subsection{Introduction into the gameplay}
+In Game Boy Wars 2 (GBW2) a red and a white team fight against each other. The teams can either be controlled by two persons in a local pass-and-play mode or in a single player mode playing against the computer.
+Each team can recruit 11 different units in their 'Industrial' or their 'Command Base' structures.
+Each unit has different static, such as health points (HP), movement and attack ranges and recruitment prices.
+There also are 'Commercial' tiles scattered around the map which can be occupied by one of a team and grant additional money every round.
+The game ends, when one of the teams 'Command Base' gets occupied by the opposing team or when a team's last active unit gets killed.
+
+\subsection{General Memory Mechanics}
+\subsubsection{Units in Memory}
+The RAM of GBW2 contains a block of addresses where the stats for units are saved. The memory address space \addr{C980} to \addr{CC0F} is reserved for the red team and \addr{CC10} to \addr{CE9F} is for white's units. We will reference these addresses as the units 'base memory' going forward.
+After loading a game these addresses all hold \dmp{7f}, until a unit is bought.
+After unit creation, 16 bytes of data, for example \addr{C980} to \addr{C98F} get populated with the units stats.
+A freshly generated Infantry unit on the red team might look like this:
+
+\dmp{00 03 08 02 00 00 32 00 63 63 49 00 28 00 00 00}
+
+The first byte is the unit type. This differs between the red team and the white team. While a red Infantry has the byte \dmp{00}, a white Infantry is type \dmp{01}. Generally through all of the unit, the white unit type seems to be the red unit type plus one.
+The second and third byte hold the units coordinates, the unit of the memory above is standing on the tile in column 3 and row 8. The fourth byte contains \dmp{02} for all units that are ready to be moved and \dmp{03} for all units that are exhausted. Exhausted units are units that either already have been used in this turn or have just been recruited.
+The 6th byte states the type of tile the unit is standing on.
+
+The table below shows the different tile types and corresponding bytes for the map Devilman.
+
+\begin{tabular}{|c|c|}
+	\hline
+	Tile type & Byte \\
+	\hline
+	Red Structure & 32 \\
+	\hline
+	White Structure & 33 \\
+	\hline
+	Grass & 3D \\
+	\hline
+	Forest & 3F \\
+	\hline
+	Mountain & 40  \\
+	\hline
+\end{tabular}
+
+The units HP are saved in the ninth byte and the units ammunition are saved in the tenth. Units lose ammunition when moving or in combat and it can be resupplied by specific supporting units like Transports.
+
+\subsubsection{Structures in Memory}
+The memory addresses right after the units base memory starting at \addr{CEA0} are for the different structures on the map.
+Each structure is represented in four bytes of data.
+The first byte depicts the structure type:
+
+\begin{tabular}{|c|c|}
+	\hline
+	Structure Type & Byte \\
+	\hline
+	Red Command Base & 3A \\
+	\hline
+	White Command Base & 3B \\
+	\hline
+	Red Commercial & 32 \\
+	\hline
+	White Commercial & 33 \\
+	\hline
+	Red Industrial & 30 \\
+	\hline
+	White Industrial & 31 \\
+	\hline
+\end{tabular}
+
+The second and third byte hold the tile coordinate, similar as in the units memory, with the second byte representing the column and the third byte representing the row of the tile.
+The HP of the structures are saved in the fourth byte.
+While the HP is being displayed as between 0 and 400 when playing the game, it is saved between 0 and $40_{10}$ (0 to $24_{16}$) in the memory, with the displayed HP being the memory HP multiplied by factor ten.
+
+\subsubsection{Selecting a Unit}
+When selecting or hovering over a unit it's stats get loaded from the memory address as described above to the addresses \addr{C4D3} to \addr{C4E2}. The example the selected units HP are now also present at the memory address \addr{C4DB}. These addresses are being used in instructions of events that happen during a turn and the base memory will only be updated after the events of the turn. Therefore we will call these addresses the units 'active memory'.
+When a selected unit targets a unit of the opposing team to attack, the stats of the opposing unit are copied to the addresses \addr{C517} to \addr{C526}, which also is used as such active memory.
+
+\subsubsection{Turn flag}
+Since the functions for the game mechanics are used by both teams, it was very important to find the memory address that flags which teams turn it is. To do this we wrote a small script that takes different memory dump inputs and looks for memory addresses, which hold the same value for all inputs if it is the red teams turn and a different input for all the inputs on a white teams turn. This skript is also in the github repository under the /tools directory.
+After using memory dumps for different situations like in and out-of combat and different tile positions the tool identified multiple suitable candidates. The one we used in our implementation is the address \addr{DF6E}, which is \dmp{3D} on a red teams turn and \dmp{53} on a white teams turn.

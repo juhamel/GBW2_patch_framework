@@ -1,0 +1,174 @@
+\section{The Cheats}
+\subsection{Invincibility}
+\subsubsection{Technical Background}
+As indicated earlier, the fights use the stats of the units that are in the units active memory.
+While the HP of a unit are being saved as a number between 0 and $99_{10}$ in memory they are displayed as a group of up to 10 individual units with a single digit HP 0-$10_{10}$. If an infantry unit has 10 HP the unit contains of 10 individual persons. When starting a fight, these double digit HP numbers are converted into the corresponding single digit representation the following way:
+The to-be-transformed value is loaded into register A and function \addr{6231} is called, which is in bank four. We will use the representation of 04:6231 with bank:address going forward. This function checks if A is zero, which should not happen and then calls another function 00:09B7, in which the main calculation is done.
+This function loops through the value in A and adds 1 to the C register for every time you can subtract $100_{10}$ ($64_{16}$) from Register A, without getting a negative result. Since there are no units with more than 99 HP, we believe that this might be used to check for errors. Afterwards it checks how many multiples of $10_{10}$ ($0A_{16}$) are in the value of register A and returns back into the function starting at 04:6231.
+The rest of this function checks if C is indeed zero, increases the B register another time, loads this value into A and returns to the original caller instruction, where A can now be used as the transformed value.
+This means the displayed HP are calculated the following way:
+\begin{equation}
+	\text{displayHP} = \left\lfloor \frac{\text{memoryHP}}{10} \right\rfloor + 1
+\end{equation}
+
+This transformation is used four times when initiating a combat, for the four following values:
+\paragraph{\addr{C60C}}
+The red unit's current HP
+\paragraph{\addr{C611}}
+The red unit's new HP
+\paragraph{\addr{C614}}
+The white unit's current HP
+\paragraph{\addr{C619}}
+The white unit's new HP
+
+The combat initialization starts with loading the HP of the attacking unit from the active memory \addr{C4DB} to \addr{C60C} and the HP of the attacked unit from \addr{C51F} to \addr{C614}. However, if it is whites turn the values of \addr{C60C} and \addr{C614} get switches, so that the addresses are always mapped to the same team.
+
+The calculation for the new HP for the attacking team starts in 00:26D4 and for the attacked team in 00:26E7.
+For the attacking team, we subtract the value in \addr{C610} from the value of \addr{C617} and for the attacked unit it is calculated by \addr{C60F}-\addr{C618}.
+
+Attack damage calculation - TODO
+
+
+\subsubsection{PyBoy Implementation}
+To implement unit invincibility we need to place different hooks.
+One hook on the function that loads the Hp from the active memory to the units base memory, which happens at 00:3A81 and then another hook for the respective teams, at 04:6190 for red and at 04:6199 for white.
+
+The instruction at 00:3A81 is part of a loop that copies a unit's active memory to their base memory by repeated
+
+LD A, (HL+)
+
+LD (DE), A
+
+INC DE
+
+instructions, where HL references the units active memory and DE the base memory. The instruction at 00:3A81 is the corresponding LD (DE), A instruction, where the units HP is copied from either \addr{C4DB} or \addr{C51F}.
+As an additional safety to not copy unwanted values, we check if DE is in a predefined set of addresses, which correspond to the base memory HP address, calculated from
+
+ \addr{C988} + i *  0x10 for i in range(41)
+ 
+ and
+
+ \addr{CC18} + i *  0x10 for i in range(41)
+ 
+If this condition matches, we use the PyBoy API to load the value referenced by DE into A, resulting in the
+
+LD (DE), A
+
+instruction effectively being 
+
+LD (DE), (DE).
+
+While this hook is sufficient to logically block units from taking any damage, the units still take damage in the combat animation.
+
+To make the combat animation match with the logic we added the two additional hooks at 04:6190 and 04:6199.
+These instructions are part of the logic, where the units new HP values (\addr{C611} and \addr{C619}) are being transformed from the memory representation to the display representation.
+They follow the format of
+
+LD A, C611/C619
+
+CALL 6231
+
+LD C611/C610, A
+
+Our hooks are set on the respective
+
+LD C611/C619, A
+
+instruction and load the units current HP calculated earlier from \addr{C60C} and \addr{C614} respectively.
+Through this hook we make sure that the units calculated new HP is the same as the old HP, which is important for the combat animation.
+
+During combat, the animation loops by decreasing the current HP value until it matches the new HP value, with animations of individuals dying every time the current HP value gets decreased.
+
+\subsection{Money Manipulation}
+\subsubsection{Technical Background}
+
+Since the maximum money of a team is $99 999_{10}$ ($01869F_{16}$) there are three bytes needed to hold money of a team.
+We identified the following bytes as responsible for holding a teams money:
+
+\begin{tabular}{|c|c|c|c|}
+	\hline
+	& Low Byte & Mid Byte & High Byte \\
+	\hline
+	Red Team & FFE6 & FFE7 & FFE8 \\
+	\hline
+	White Team & FFE9 & FFEA & FFEB \\
+	\hline
+\end{tabular}
+
+The 3 byte number of the money simply gets split into the three bytes per team. The maxmium money for a team would therefore be represented as
+
+\begin{tabular}{|c|c|c|}
+	\hline
+	Low Byte & Mid Byte & High Byte \\
+	\hline
+	9F & 86 & 01 \\
+	\hline
+\end{tabular}
+
+ Alternatively the total amount can be calculated the following way:
+\begin{equation}
+	\text{totalMoney} = \text{highByte} * 65 536 + \text{midByte} * 256 + \text{lowByte}
+\end{equation}
+
+\subsubsection{PyBoy Implementation}
+We wanted to give the player the possibility to manually manipulate their or the opponents money.
+To do this we added two input fields to set the money to or to add/subtract individual arbitrary inputs or preset options to add or subtract 1000, 5000 and 10 000.
+These new money value is then calculated by our script and written to the responsible bytes for the affected team.
+
+
+\subsection{Money Locking}
+\subsubsection{PyBoy Implementation}
+To lock the money to the most recent amount, we wrote a function that checks if the current money value of a team is lower than the money at the last check.
+If so, we load the previous value back into the bytes which hold the teams money and into our current money variable in the function.
+After this check the variable that hold the money to compare is updated.
+This function is called on every tick in our framework and therefore blocks decrease in money, making it possible to buy units for free while still receiving money from the commercial structures.
+
+\subsection{Infinite Moves}
+\subsubsection{Technical Background}
+As already stated in Section I.B.1) Units in Memory, units are only allowed to do one move per turn and are in an 'exhausted' state after their move. This state is represented by the fourth byte in the units base memory or in \addr{C4D6} for a currently selected unit, which hold \dmp{02} for units that are ready to move and \dmp{03} for units that have already moved.
+This flag is set in 00:1C1C by the instruction
+
+SET 0, (HL)
+
+which sets the least significant bit in the byte referenced by the registers H and L, which is \addr{C4D6} and therefore changes it from $10_2$ ($02_{16}$) to $11_2$ ($03_{16}$).
+
+\subsubsection{PyBoy Implementation}
+If a PyBoy hook is set it always triggers before the instruction is executed by the emulator.
+Therefore we had do set the hook for the infinite moves cheat on the instruction after 00:1C1C, which is 00:1C1E. If the hook would have been set on 00:1C1C the instruction would have overwritten any changes made by us and set bit 0 anyways.
+Therefore we set the hook at 00:1C1E, to trigger right after byte in \addr{C4D6} has been changed and reset it back to \dmp{02}.
+Because this instruction is used by both units, we also added additional checks whose teams turn it is and if the cheat is activated for the team, to only reset the \addr{C4D6} byte on the turn of the team with an active infinite moves cheat. 
+
+Since the hook only affects the currently selected unit in the active memory we also added another function.
+As soon as the cheat gets activated, the whole unit base memory block for the team gets checked for any \dmp{03} bytes in the fourth byte of each unit to reset them to \dmp{02}. Similarly to the implementation of the invincible units cheat, we also defined sets with the memory addresses for both teams the following way:
+
+frozenset(0xC983 + i * 0x10 for i in range(41))
+
+and
+
+frozenset(0xCC13 + i * 0x10 for i in range(41))
+
+
+\subsection{Instant Capture}
+\subsubsection{Technical Background}
+Capturing enemy structures is a crucial part of GBW2 and as we already introduced in Section I.B.2) Structures in Memory the stats for structures are saved in 4 byte blocks starting at the address \addr{CEA0}.
+The HP of the structure are saved in the fourth byte of each block. When a structure is besieged, the current HP is loaded into the A register and the previously calculated damage is subtracted from it in 01:6C65.
+The damage to the structure is dependent on the besieging units HP and is calculated by the same procedure 00:09B7 used to transform a units memory HP to the display HP.
+The damage calculation can be described as the following equation:
+\begin{equation}
+	\text{structueDamage} = \left\lfloor \frac{\text{attackingMemoryHP}}{10} \right\rfloor + 1
+\end{equation}
+It is important to note here again, that the displayed HP of a structure is their HP in memory multiplied by factor 10.
+So the displayed structure Damage can be calculated by:
+\begin{equation}
+	\text{displayedStructueDamage} = \left\lfloor \text{attackingMemoryHP} \right\rfloor + 10
+\end{equation}
+
+If the besieged structures HP hit 0 or below, the structure is conquered by the attacking team.
+During the conquer procedure the attacking units tile type gets loaded to register A, function 01:6CCA is called and the game checks the tile type and loads the corresponding conquered tile type from the ROM into the structures base memory and the units active memory.
+The new tile type is loaded from \addr{6CDA} plus an offset, which is calculated from the previous tile type and \addr{FFD6}, which seems to be another turn flag in the game, being \dmp{00} if red conquers and \dmp{01} if white conquers.
+After the structures team byte has changed the standard HP get loaded into the structures base memory. The HP are also loaded from the ROM, depending on an offset calculated by the structure type in the sub-routine 00:2148.
+\subsubsection{PyBoy Implementation}
+To implement a cheat that lets a unit instantly capture a structure we set a hook on instruction 01:6C65, which is responsible for subtracting the damage from the current health.
+Once this hook triggers, we check the turn flag to see which team is besieging the structure and if the cheat is enabled for this team.
+If this aligns, we use the PyBoy API to load the value from register A, which is the current structure HP into register C, which hold the calculated damage.
+Using this technique the incoming damage is always as high as the structure HP and the structure will be conquered through the normal game mechanic.

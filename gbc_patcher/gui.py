@@ -86,7 +86,7 @@ _WHITE_HP_ADDRS = frozenset(0xCC18 + i * 0x10 for i in range(41))
 _INVINC_HOOK_BANK = 0
 _INVINC_HOOK_ADDR = 0x3A81
 
-_TURN_ADDR        = 0xC4D3   # 1 = Red's turn, 0 = White's turn
+_TURN_ADDR        = 0xDF6E   # 0x3D = Red's turn, 0x53 = White's turn
 _HOOK_BANK        = 4
 
 _HOOK_ADDR_A      = 0x6190   # Load 0xC60C into A under matching-team invincibility
@@ -167,8 +167,8 @@ class InvincibilityManager:
     # ------------------------------------------------------------------
 
     def _is_red_turn(self) -> bool:
-        """Returns True when 0xC4D3 == 0 (Red's turn)."""
-        return self._pyboy.memory[_TURN_ADDR] == 0
+        """Returns True when 0xDF6E == 0x3D (Red's turn)."""
+        return self._pyboy.memory[_TURN_ADDR] == 0x3D
 
     # ------------------------------------------------------------------
     # Callbacks
@@ -680,7 +680,7 @@ class InfiniteMovesManager:
     def _callback(self, register_file) -> None:
         if self._pyboy is None:
             return
-        red_turn = self._pyboy.memory[_TURN_ADDR] == 0
+        red_turn = self._pyboy.memory[_TURN_ADDR] == 0x3D
         if (red_turn and self._red_infinite_moves) or \
            (not red_turn and self._white_infinite_moves):
             self._pyboy.memory[_MOVES_FLAG_ADDR] = _FLAG_UNMOVED
@@ -765,8 +765,8 @@ class InstantCaptureManager:
     of A - C is always 0, which the game interprets as a fully-captured base.
 
     Turn detection uses the same _TURN_ADDR flag as the other managers:
-        0x00 → Red's turn
-        non-zero → White's turn
+        0x3D → Red's turn
+        0x53 → White's turn
     """
 
     def __init__(self):
@@ -818,7 +818,7 @@ class InstantCaptureManager:
         """
         if self._pyboy is None:
             return
-        red_turn = self._pyboy.memory[_TURN_ADDR] == 0
+        red_turn = self._pyboy.memory[_TURN_ADDR] == 0x3D
         if (red_turn and self._red_instant_capture) or \
            (not red_turn and self._white_instant_capture):
             register_file.C = register_file.A

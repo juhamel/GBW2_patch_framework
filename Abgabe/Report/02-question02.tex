@@ -1,0 +1,21 @@
+\section{The Cheat Framework}
+
+\subsection{General implementation}
+As we stated earlier, the actions of both teams use the same functions, but just load different data inputs. For example there is only one function for the combat, which takes the values from the active unit memory addresses, which are populated differently based on which teams turn it is. This made it very complicated to write static cheats that are only valid for one team, which is why we decided on an implementation based on hooks that trigger if the Program Counter (PC) reaches specific addresses and manipulate the memory accordingly.
+To do this we used pyboy \footnote{https://github.com/baekalfen/pyboy}, which gives us an emulator to run the game and an API to manipulate the memory in python.
+
+\subsubsection{Installation and Usage}
+After cloning the GitHub repository, you can install the needed dependencies
+by running the following command in the root directory of the framework:
+
+\begin{lstlisting}[style=shell]
+	pip install -e .
+\end{lstlisting}
+
+To run the emulator, execute the following command from the root directory:
+
+\begin{lstlisting}[style=shell]
+	python3 -m gbc_patcher [PATH_TO_ROM]
+\end{lstlisting}
+
+If no ROM path is provided, the ROM can also be selected through the GUI.
