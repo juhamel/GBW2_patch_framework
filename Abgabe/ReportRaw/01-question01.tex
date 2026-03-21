@@ -20,15 +20,15 @@ The first byte is the unit type. This differs between the red team and the white
 The second and third byte hold the units coordinates, the unit of the memory above is standing on the tile in column 3 and row 8. The fourth byte contains \dmp{02} for all units that are ready to be moved and \dmp{03} for all units that are exhausted. Exhausted units are units that either already have been used in this turn or have just been recruited.
 The 6th byte states the type of tile the unit is standing on.
 
-The table below shows the different tile types and corresponding bytes for the map Devilman.
+The table below shows a non exhaustive list of different tile types and corresponding bytes for the map Devilman.
 
 \begin{tabular}{|c|c|}
 	\hline
 	Tile type & Byte \\
 	\hline
-	Red Structure & 32 \\
+	Red Commercial & 32 \\
 	\hline
-	White Structure & 33 \\
+	White Commercial & 33 \\
 	\hline
 	Grass & 3D \\
 	\hline

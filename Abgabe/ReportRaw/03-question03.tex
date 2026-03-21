@@ -21,13 +21,43 @@ The white unit's current HP
 \paragraph{\addr{C619}}
 The white unit's new HP
 
-The combat initialization starts with loading the HP of the attacking unit from the active memory \addr{C4DB} to \addr{C60C} and the HP of the attacked unit from \addr{C51F} to \addr{C614}. However, if it is whites turn the values of \addr{C60C} and \addr{C614} get switches, so that the addresses are always mapped to the same team.
+The combat initialization starts with loading the HP of the attacking unit from the active memory \addr{C4DB} to \addr{C60C} and the HP of the attacked unit from \addr{C51F} to \addr{C614}. However, if it is whites turn the values of \addr{C60C} and \addr{C614} get switched, so that the addresses are always mapped to the same team.
 
 The calculation for the new HP for the attacking team starts in 00:26D4 and for the attacked team in 00:26E7.
 For the attacking team, we subtract the value in \addr{C610} from the value of \addr{C617} and for the attacked unit it is calculated by \addr{C60F}-\addr{C618}.
 
-Attack damage calculation - TODO
+There are multiple routines involved in calculating the actual damage, but three stand out specifically:
+\setcounter{paragraph}{0}
+\paragraph{00:0916} This routine is a shift-and-add multiplication, which multiplies registers B and E into the HL registers
+\paragraph{00:097D} This routine is a shift-and-subtract division, which divides the HL registers by the BC registers.
+\paragraph{00:0AEE} This routine is called multiple time to calculate an offset for the values in the HL registers, by adding A to L and adding a potential carry  flag to H.
 
+The detailed combat calculation starts in 00:262A.
+Since the total damage is calculated by a subtracting \addr{C610} and \addr{C618} from \addr{C617} and \addr{C60F} and they are calculated in a similar matter, with the only difference being an addition of \dmp{05} to \addr{C60F} we will describe the functionality with the names 'base damage' and 'damage reduction' going forward.
+
+The base damage is calulated by loading a value from the Read Only Memory, which is dependent on the unit type of the subjected team. For the attacking unit damage this is \addr{C4D3} and for the the attacked it is \addr{C517}.
+This value can then be manipulated further, depending on the eleventh and twelfth byte of the opposing units active memory, which hold specific additional combat stats.
+This value is then loaded into the B register, before loading the opposing units HP into register E and calling the procedures 00:0916 and 097D, which multiplies this previouly loaded ROM value with the opposing units HP and divides it by the fixed value of $63_{16}$ ($99_{10}$).
+This result is then being saved into the base damage memory address for the teams, with the value being loaded into \addr{C60F} getting an additional increase of \dmp{05}, to give the attacking team a little bit more damage.
+
+\begin{equation}
+	\begin{aligned}
+	\text{baseDamage} &=\lfloor\frac{unitTypeValue * opposingUnitHP}{99}\rfloor \\
+	 &+ \begin{cases} 5 & \text{for attacked team} \\ 0 & \text{otherwise} \end{cases}
+	\end{aligned}
+\end{equation}
+
+The damage reduction is calculated in a similar manner. It starts by loading the tile type of its own units location and calculates an offset based off that. This offset is then used to load a ROM value, which will be multiplied with the previously calculated base damage and then divided by $100_{10}$ as well. This result is then loaded into the respective address of \addr{C610} or \addr{C618}.
+
+\begin{equation}
+		\text{damageReduction} =\lfloor\frac{tileTypeValue * baseDamage}{100}\rfloor
+\end{equation}
+
+These values are then used to calculate the units new HP values and loaded into the respective memory addresses of \addr{C611} and \addr{C619}.
+
+\begin{equation}
+	\text{newHP} = \text{activeMemoryHP} - (\text{baseDamage} -\text{damageReduction})
+\end{equation}
 
 \subsubsection{PyBoy Implementation}
 To implement unit invincibility we need to place different hooks.

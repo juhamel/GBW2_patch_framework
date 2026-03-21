@@ -9,7 +9,6 @@ MAIN_FILE=00-main
 
 all:
 	$(TEX) $(MAIN_FILE)
-	$(BIB) $(MAIN_FILE)
 	$(TEX) $(MAIN_FILE)
 	$(TEX) $(MAIN_FILE)
 
