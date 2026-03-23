@@ -11,7 +11,7 @@ Layout
 │                        │  CHEATS                     │
 │   Game Display         │  🛡 Invincibility            │
 │   (160×144 × 3)        │  💰 Red Team money           │
-│                        │  💰 White Team money         │
+│                        │  💰 White Team money│
 ├────────────────────────┴─────────────────────────────┤
 │  [⏸ Pause]  Speed: [1×][2×][4×][MAX]  FPS  [✕ Close]│
 └──────────────────────────────────────────────────────┘
@@ -889,6 +889,172 @@ class InstantCaptureCard(tk.Frame):
         btn.pack()
 
 
+
+# ---------------------------------------------------------------------------
+# OneHitKillManager
+# ---------------------------------------------------------------------------
+
+_ONEHIT_HOOK_BANK = 0
+_ONEHIT_HOOK_ADDR_ATTACKING   = 0x26E4
+_ONEHIT_HOOK_ADDR_ATTACKED = 0x26F7
+
+_RED_NEW_HP_ADDR   = 0xC611
+_WHITE_NEW_HP_ADDR = 0xC619
+
+
+class OneHitKillManager:
+    """
+    Forces the opposing team's computed combat HP to 0.
+
+    Combat RAM:
+        0xC611 = Red team's new HP
+        0xC619 = White team's new HP
+
+    Turn flag:
+        0xDF6E == 0x3D -> Red turn
+        0xDF6E == 0x53 -> White turn
+    """
+
+    def __init__(self):
+        self._red_one_hit_kill = False
+        self._white_one_hit_kill = False
+        self._double_execution_flag = False
+        self._registered = False
+        self._pyboy = None
+
+    @property
+    def red_one_hit_kill(self) -> bool:
+        return self._red_one_hit_kill
+
+    @red_one_hit_kill.setter
+    def red_one_hit_kill(self, value: bool) -> None:
+        self._red_one_hit_kill = value
+        logger.info("OneHitKill Red: %s", "ON" if value else "OFF")
+
+    @property
+    def white_one_hit_kill(self) -> bool:
+        return self._white_one_hit_kill
+
+    @white_one_hit_kill.setter
+    def white_one_hit_kill(self, value: bool) -> None:
+        self._white_one_hit_kill = value
+        logger.info("OneHitKill White: %s", "ON" if value else "OFF")
+
+    def register(self, pyboy) -> None:
+        if self._registered:
+            return
+        self._pyboy = pyboy
+
+        pyboy.hook_register(
+            _ONEHIT_HOOK_BANK,
+            _ONEHIT_HOOK_ADDR_ATTACKING,
+            self._callback_26E4,
+            context=pyboy.register_file,
+        )
+
+        pyboy.hook_register(
+            _ONEHIT_HOOK_BANK,
+            _ONEHIT_HOOK_ADDR_ATTACKED,
+            self._callback_26F7,
+            context=pyboy.register_file,
+        )
+
+        self._registered = True
+        logger.info(
+            "One-hit-kill hooks registered at bank=%d addrs=0x%04X, 0x%04X",
+            _ONEHIT_HOOK_BANK,
+            _ONEHIT_HOOK_ADDR_ATTACKING,
+            _ONEHIT_HOOK_ADDR_ATTACKED,
+        )
+
+    def _callback_26E4(self, register_file) -> None:
+        if self._pyboy is None:
+            return
+
+        red_turn = self._pyboy.memory[_TURN_ADDR] == 0x3D
+
+        # This instruction gets called twice, first time is depending on who is attacking, second time it is team fixed
+        if (not self._double_execution_flag):
+            self._double_execution_flag = True
+        else:
+            register_file.A = 0
+            self._double_execution_flag = False
+            logger.debug("OneHitKill: forced White new HP to 0")
+
+
+    def _callback_26F7(self, register_file) -> None:
+        if self._pyboy is None:
+            return
+
+        red_turn = self._pyboy.memory[_TURN_ADDR] == 0x3D
+        
+        if (not self._double_execution_flag):
+            self._double_execution_flag = True
+        else:
+            register_file.A = 0
+            self._double_execution_flag = False
+            logger.debug("OneHitKill: forced Red new HP to 0")
+# ---------------------------------------------------------------------------
+# OneHitKillCard widget
+# ---------------------------------------------------------------------------
+
+class OneHitKillCard(tk.Frame):
+    """Per-team one-hit-kill toggle card."""
+
+    def __init__(self, parent, manager: OneHitKillManager, **kwargs):
+        super().__init__(parent, bg=CARD_BG, **kwargs)
+        self._mgr = manager
+        self._red_var = tk.BooleanVar(value=False)
+        self._white_var = tk.BooleanVar(value=False)
+        self._build()
+
+    def _build(self):
+        self.config(pady=8, padx=10)
+
+        hdr = tk.Frame(self, bg=CARD_BG)
+        hdr.pack(fill="x")
+        tk.Label(
+            hdr, text="💀  One-Hit-Kill",
+            font=("Segoe UI", 10, "bold"),
+            bg=CARD_BG, fg="#f87171",
+        ).pack(side="left")
+
+        btn_row = tk.Frame(self, bg=CARD_BG)
+        btn_row.pack(fill="x", pady=(8, 0))
+        for label, var, color, attr in [
+            ("Red Team",   self._red_var,   "#e94560", "red_one_hit_kill"),
+            ("White Team", self._white_var, "#aabbdd", "white_one_hit_kill"),
+        ]:
+            self._make_toggle(btn_row, label, var, color, attr)
+
+        tk.Frame(self, bg=BORDER, height=1).pack(fill="x", pady=(8, 0))
+
+    def _make_toggle(self, parent, label, var, color, attr):
+        frame = tk.Frame(parent, bg=CARD_BG)
+        frame.pack(side="left", padx=(0, 8))
+
+        def _toggle():
+            state = var.get()
+            setattr(self._mgr, attr, state)
+            btn.config(
+                text=f"● {label}" if state else f"○ {label}",
+                bg="#1a2a1a" if state else CARD_BG,
+                fg=color if state else TEXT_DISABLED,
+            )
+            logger.info("OneHitKill %s: %s", label, "ON" if state else "OFF")
+
+        btn = tk.Checkbutton(
+            frame, text=f"○ {label}",
+            variable=var, command=_toggle,
+            font=("Segoe UI", 9, "bold"),
+            bg=CARD_BG, fg=TEXT_DISABLED,
+            activebackground=CARD_BG, activeforeground=color,
+            selectcolor=DARK_BG, indicatoron=False,
+            relief="flat", padx=10, pady=5, cursor="hand2",
+        )
+        btn.pack()
+
+
 # ---------------------------------------------------------------------------
 # Main Application Window
 # ---------------------------------------------------------------------------
@@ -928,6 +1094,9 @@ class GBCPatcherApp(tk.Tk):
 
         self._capture_manager = InstantCaptureManager()
         self._capture_card: Optional[InstantCaptureCard] = None
+
+        self._onehit_manager = OneHitKillManager()
+        self._onehit_card: Optional[OneHitKillCard] = None
 
         self._fps_frames  = 0
         self._fps_last    = time.perf_counter()
@@ -1062,6 +1231,11 @@ class GBCPatcherApp(tk.Tk):
         )
         self._capture_card.pack(fill="x", padx=4, pady=(4, 2))
 
+        self._onehit_card = OneHitKillCard(
+            self._patch_list_frame, manager=self._onehit_manager,
+            )
+        self._onehit_card.pack(fill="x", padx=4, pady=(4, 2))
+
         self._build_controls()
 
     def _build_controls(self):
@@ -1177,6 +1351,8 @@ class GBCPatcherApp(tk.Tk):
         self._moves_manager.register(self._emulator._pyboy)
 
         self._capture_manager.register(self._emulator._pyboy)
+
+        self._onehit_manager.register(self._emulator._pyboy)
 
         if not self._invinc_card_visible:
             self._invinc_card.pack(fill="x", padx=4, pady=(4, 2))
