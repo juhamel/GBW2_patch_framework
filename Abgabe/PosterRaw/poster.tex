@@ -52,7 +52,7 @@
 % ====================
 
 \footercontent{
-	Binary Hacking 2024/25 \hfill
+	Binary Hacking 2025/26 \hfill
 	\href{mailto:sw322@stud.uni-heidelberg.de}{sw322@stud.uni-heidelberg.de}
 	\href{mailto:leah.ludwig@stud.uni-heidelberg.de}{leah.ludwig@stud.uni-heidelberg.de}
 	\href{mailto:julius.hamel@stud.uni-heidelberg.de}{julius.hamel@stud.uni-heidelberg.de}
@@ -80,9 +80,29 @@
 \begin{column}{\colwidth}
 
 	\begin{block}{Motivation and Challenges}
-	We chose the GameBoy Color game Game Boy Wars 2 (GBW2) as a topic for the practical. Our goal was get an understanding of key game mechanics and to write cheats based on the mechanics we identified. 
+	We chose the GameBoy Color game Game Boy Wars 2 (GBW2) as a topic for the practical. Our goal was get an understanding of key game mechanics and to write cheats based on the mechanics we identified. We wanted to write a user-friendly framework where GBW2 can be played in an emulator and the cheats can dynamically be applied in the same place.
 	
 	We specifically chose GBW2 as a relatively unknown game with little available sources to start this practical from scratch. The turn based nature of the strategy game GBW2 gave us an easy entryway analyze the memory state in the beginning, but also made it quite challenging to keep track of instructions and memory blocks being used by both players.
+	
+	Since none of us had any greater experience with assembly code and reverse engineering it took us quite some time to grasp the topic. Especially gaining understanding of the combat damage calculations was complex. While the calculation is nothing extraordinary on a high level, the low level implementations of shift-and-add multiplication and shift-and-subtract divisions required time and effort to spot and understand in the game loop.
+	
+	\end{block}
+
+	\begin{block}{Game Boy Wars 2 Gameplay}
+	GBW 2 is a turn-based strategy game for one or two players. In the singleplayer mode you play against a computer controlled enemy. Alternatively you can opt for the multiplayer mode where two players can play against each other through a Game Link Cable connection or through pass-and-play on the same device.
+	
+	You can win the game by capturing your enemies 'Command Base' structure or kill all of their units in combat.
+	
+	Each player can recruit one of 21 different unit types, such as Infantry units, tanks or submarines in unit specific structures, like 'Commercial', 'Ship Yard' or 'Airports'. Each unit has a different price and combat stats. Units can have up to two weapons, which have deal different damage in combat.
+	They also have different amounts of HP and 'Ammunition'. A unit loses 'Ammunition' while traveling or fighting, but they can be resupplied by supporting units. Additionally the different units also have different movement ranges and might not be able to move onto every tile type.
+	
+	Players earn money each round, which is increased by 'Industrial' structures. These structures can be conquered by the opposing team.
+	
+	GBW2 comes with 24 different maps to play and has a built-in map editor tool, where you can create your own maps.
+	\begin{figure}
+		\includegraphics[]{intro.png}
+		\caption{A screenshot from the GBW2 intro}
+	\end{figure}
 	\end{block}
 
 	\begin{alertblock}{Methodology and Concept}
@@ -92,9 +112,9 @@
 	After gaining more knowledge about the structure of GBW2, we were also able to identify the us and structure of memory blocks more easily.
 	One good example for this are the memory addresses of structures, which comes right after the RAM block of combat units. After learning and understanding about the units memory we were able to understand the concept of the structure memory much faster. 
 	
-	We wrote a python framework based on the emulator pyboy, which also has a memory manipulation API, with can be used to run GBW2 and select wanted cheats for either team from a graphical interface. 
+	We wrote a python framework based on the emulator PyBoy, which also has a memory manipulation API, with can be used to run GBW2 and select wanted cheats for either team from a graphical interface. 
 	
-	Most of our cheats in this framework are based on pyboy hooks, which trigger when the programm counter (PC) reaches a specific instruction.
+	Most of our cheats in this framework are based on PyBoy hooks, which trigger when the program counter (PC) reaches a specific instruction.
 	We chose to go for this approach instead of static assembly manipulation to make it easier to enable a cheat for a single team.
 	
 	While there are a few functions and procedures which get called in the same team order every time where we could have injected our own modified assembly functions at other times it is the exact same instruction being called for both teams, that loads different values based on addresses in the HL registers.
@@ -122,9 +142,9 @@
 		\hline
 		Tile type & Byte \\
 		\hline
-		Red Commercial & 32 \\
+		Red Industrial & 32 \\
 		\hline
-		White Commercial & 33 \\
+		White Industrial & 33 \\
 		\hline
 		Grass & 3D \\
 		\hline
@@ -156,13 +176,13 @@
 		\hline
 		White Command Base & 3B \\
 		\hline
-		Red Commercial & 32 \\
+		Red Industrial & 32 \\
 		\hline
-		White Commercial & 33 \\
+		White Industrial & 33 \\
 		\hline
-		Red Industrial & 30 \\
+		Red Commercial & 30 \\
 		\hline
-		White Industrial & 31 \\
+		White Commercial & 31 \\
 		\hline
 	\end{tabular}
 	
@@ -171,7 +191,7 @@
 	\end{block}
 	\begin{block}{Combat Loop}
 		Whenever a unit is selected, their memory is copied from the memory addresses described above to another section in the RAM, starting at C4D3. Once another unit is selected to be attacked their memory is copied to C517 - C526.
-		When combat is initialized, the game calculates the damage for both units and updates the previously mentioned RAM sections. This can be described with the following equations, where unitTypeValue and tileTypeValue are loaded from the ROM, depending on the unit type and tile type.
+		When combat is initialized, the game calculates the damage for both units and updates the previously mentioned RAM sections. This can be described with the following equations, where 'unitTypeValue' and 'tileTypeValue' are loaded from the ROM, depending on the unit type and tile type.
 		
 		\begin{equation}
 			\text{newHP} = \text{currentHP} - (\text{baseDamage} -\text{damageReduction})
@@ -213,27 +233,33 @@
 
 	The full list of cheats we achieved to write is:
 	\begin{enumerate}
-		\item Invincibilty
+		\item Invincibility
 		
-		Our Invincibility cheat makes units invincible. They do not lose any HP in combat and no units die in combat animation.
+		Our Invincibility cheat makes units invincible. They do not lose any HP in combat and no units die in combat animation, due to setting the new HP value the same as the current HP value after their initialization.
 		\item Money Locking
 		
-		When Money Locking is active a teams money does not get decreased after buying a new unit. 
+		When Money Locking is active a teams money does not get decreased after buying a new unit. We achieved this my comparing the state of a teams money every tick in the emulator and revert is back up to the previous state if is has been decreased.
 		\item Infinite Moves
 		
 		The Infinite Moves cheat allows units to move multiple times in one turn, this includes attacking multiple times.
+		The cheat reverts a bit-set operation that changes the fourth byte of the units memory block from 02 to 03.
+		Additionally when activating this cheat all existing units in memory are checked and any 'exhausted' state is overwritten.
 		\item Instant Capture
 		
-		Instant Capture makes units capture enemies structures in one turn, even if they have more HP than the units structure damage.
+		Instant Capture makes units capture enemies structures in one turn, even if they have more HP than the units structure damage. The normal structure damage is calculated the same way as the displayed HP of a unit. When the cheat is active, the full current HP is being subtracted from the structure instead of the units calculated structure damage.
 		\item One-Hit Kill
 		
 		The One-Hit Kill cheat is the opposite of invincibility and makes units kill every enemy unit in one attack.
+		To achieve that we set a hook on the instruction in the combat loop that sets the new HP and this hook set the new HP to zero.
+		Since this calculation happens twice every turn we implemented a boolean flag, that only makes this cheat trigger on the second calculation loop execution, where the registers C611 and C619 strictly represent the red and white team respectively 
 		
 		\item Money Manipulation
+		
 		Our Money Manipulation cheats allows the player to manually increase or decrease their own or the enemies money by an arbitrary input or pre-set amount.
+		The money is capped at 99.999 and is represented by three bytes each for the two teams. To manipulate the money we simply calculate the new money and load it accordingly into the three bytes.
 		
 		\begin{figure}
-			\includegraphics[width=\columnwidth]{money.png}
+			\includegraphics[scale=2]{money.png}
 			\caption{A screenshot of the Money Manipulation GUI}
 		\end{figure}
 	\end{enumerate}

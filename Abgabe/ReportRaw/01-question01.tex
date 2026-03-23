@@ -2,9 +2,10 @@
 
 \subsection{Introduction into the gameplay}
 In Game Boy Wars 2 (GBW2) a red and a white team fight against each other. The teams can either be controlled by two persons in a local pass-and-play mode or in a single player mode playing against the computer.
-Each team can recruit 11 different units in their 'Industrial' or their 'Command Base' structures.
-Each unit has different static, such as health points (HP), movement and attack ranges and recruitment prices.
-There also are 'Commercial' tiles scattered around the map which can be occupied by one of a team and grant additional money every round.
+Each team can recruit 21 different units in their 'Commercial' or their 'Command Base' structures.
+Special navy units can be bought at 'Ship Yard' structures and airborne units can be recruited at the airport.
+Each unit has different static, such as health points (HP), movement ranges and types, attack ranges and recruitment prices.
+There also are 'Industrial' tiles scattered around the maps which can be occupied by one of a team and grant additional money every round.
 The game ends, when one of the teams 'Command Base' gets occupied by the opposing team or when a team's last active unit gets killed.
 
 \subsection{General Memory Mechanics}
@@ -26,9 +27,9 @@ The table below shows a non exhaustive list of different tile types and correspo
 	\hline
 	Tile type & Byte \\
 	\hline
-	Red Commercial & 32 \\
+	Red Industrial & 32 \\
 	\hline
-	White Commercial & 33 \\
+	White Industrial & 33 \\
 	\hline
 	Grass & 3D \\
 	\hline
@@ -53,13 +54,13 @@ The first byte depicts the structure type:
 	\hline
 	White Command Base & 3B \\
 	\hline
-	Red Commercial & 32 \\
+	Red Industrial & 32 \\
 	\hline
-	White Commercial & 33 \\
+	White Industrial & 33 \\
 	\hline
-	Red Industrial & 30 \\
+	Red Commercial & 30 \\
 	\hline
-	White Industrial & 31 \\
+	White Commercial & 31 \\
 	\hline
 \end{tabular}
 
@@ -72,5 +73,5 @@ When selecting or hovering over a unit it's stats get loaded from the memory add
 When a selected unit targets a unit of the opposing team to attack, the stats of the opposing unit are copied to the addresses \addr{C517} to \addr{C526}, which also is used as such active memory.
 
 \subsubsection{Turn flag}
-Since the functions for the game mechanics are used by both teams, it was very important to find the memory address that flags which teams turn it is. To do this we wrote a small script that takes different memory dump inputs and looks for memory addresses, which hold the same value for all inputs if it is the red teams turn and a different input for all the inputs on a white teams turn. This skript is also in the github repository under the /tools directory.
+Since the functions for the game mechanics are used by both teams, it was very important to find the memory address that flags which teams turn it is. To do this we wrote a small script that takes different memory dump inputs and looks for memory addresses, which hold the same value for all inputs if it is the red teams turn and a different input for all the inputs on a white teams turn. This skript is also in the GitHub repository under the /tools directory.
 After using memory dumps for different situations like in and out-of combat and different tile positions the tool identified multiple suitable candidates. The one we used in our implementation is the address \addr{DF6E}, which is \dmp{3D} on a red teams turn and \dmp{53} on a white teams turn.

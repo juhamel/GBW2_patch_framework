@@ -35,9 +35,9 @@ There are multiple routines involved in calculating the actual damage, but three
 The detailed combat calculation starts in 00:262A.
 Since the total damage is calculated by a subtracting \addr{C610} and \addr{C618} from \addr{C617} and \addr{C60F} and they are calculated in a similar matter, with the only difference being an addition of \dmp{05} to \addr{C60F} we will describe the functionality with the names 'base damage' and 'damage reduction' going forward.
 
-The base damage is calulated by loading a value from the Read Only Memory, which is dependent on the unit type of the subjected team. For the attacking unit damage this is \addr{C4D3} and for the the attacked it is \addr{C517}.
+The base damage is calculated by loading a value from the Read Only Memory, which is dependent on the unit type of the subjected team. For the attacking unit damage this is \addr{C4D3} and for the the attacked it is \addr{C517}.
 This value can then be manipulated further, depending on the eleventh and twelfth byte of the opposing units active memory, which hold specific additional combat stats.
-This value is then loaded into the B register, before loading the opposing units HP into register E and calling the procedures 00:0916 and 097D, which multiplies this previouly loaded ROM value with the opposing units HP and divides it by the fixed value of $63_{16}$ ($99_{10}$).
+This value is then loaded into the B register, before loading the opposing units HP into register E and calling the procedures 00:0916 and 097D, which multiplies this previously loaded ROM value with the opposing units HP and divides it by the fixed value of $63_{16}$ ($99_{10}$).
 This result is then being saved into the base damage memory address for the teams, with the value being loaded into \addr{C60F} getting an additional increase of \dmp{05}, to give the attacking team a little bit more damage.
 
 \begin{equation}
@@ -202,3 +202,12 @@ To implement a cheat that lets a unit instantly capture a structure we set a hoo
 Once this hook triggers, we check the turn flag to see which team is besieging the structure and if the cheat is enabled for this team.
 If this aligns, we use the PyBoy API to load the value from register A, which is the current structure HP into register C, which hold the calculated damage.
 Using this technique the incoming damage is always as high as the structure HP and the structure will be conquered through the normal game mechanic.
+
+\subsection{One-Hit Kills}
+\subsubsection{Technical Background}
+To implement the one-hit-kill cheat, we manipulated the combat system at the point where the game calculates and stores the new hit points (HP) of both the units. We specifically targeted the memory addresses responsible for the post-combat HP values: \addr{C611} for the red team and \addr{C619} for the white team. By intercepting the execution at these points using PyBoy hooks, we overwrite the computed HP of the opposing unit with zero, effectively eliminating it in a single attack.
+
+A key challenge was that the combat routine is executed twice, with different memory layouts in each iteration: during the first pass, the HP values are associated with the attacker and defender dynamically, while in the second pass they are consistently mapped to the red and white teams. 
+
+\subsubsection{PyBoy Implementation}
+To ensure the correct behaviour, we introduced a toggle mechanism so that the cheat is only applied during the second execution, where the team assignments are stable. The toggle is a simple boolean flag, which initially is set as false and gets set to true on the first run. Our code only loads 0 into the new HP memory if the flag is true, hence if it is the second execution cycle. This approach allows for a reliable and deterministic one-hit-kill effect without interfering with other parts of the game logic.
