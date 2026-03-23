@@ -17,6 +17,12 @@
 	One good example for this are the memory addresses of structures, which comes right after the RAM block of combat units. After learning and understanding about the units memory we were able to understand the concept of the structure memory much faster.
 	
 	We wrote a python framework based on the emulator pyboy, which also has a memory manipulation API, with can be used to run GBW2 and select wanted cheats for either team from a graphical interface.
+	
+	Most of our cheats in this framework are based on pyboy hooks, which trigger when the programm counter (PC) reaches a specific instruction.
+	We chose to go for this approach instead of static assembly manipulation to make it easier to enable a cheat for a single team.
+	
+	While there are a few functions and procedures which get called in the same team order every time where we could have injected our own modified assembly functions at other times it is the exact same instruction being called for both teams, that loads different values based on addresses in the HL registers.
+	Since we were unable to effectively handle such cases we opted for pyboy hooks and high-level functions, such as if-else, to check if a cheat should be applied or not.
 \end{alertblock}
 
 
@@ -160,6 +166,7 @@
 
 	\begin{exampleblock}{Future Work}
 	For future work it would be very interesting to analyze how the computer controls a player and makes gameplay decisions.
+	Additionally attempting to add new functions in free memory space or with python API support, like 'capturing' defeated enemy units by transferring their memory into your teams unit memory would be a nice idea.
 
 	\end{exampleblock}
 

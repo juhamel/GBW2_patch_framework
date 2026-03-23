@@ -1,4 +1,4 @@
-This is LuaHBTeX, Version 1.14.0 (TeX Live 2022/dev/Debian)  (format=lualatex 2026.2.5)  23 MAR 2026 14:50
+This is LuaHBTeX, Version 1.14.0 (TeX Live 2022/dev/Debian)  (format=lualatex 2026.2.5)  23 MAR 2026 19:29
  restricted system commands enabled.
 **poster.tex
 (./poster.tex
@@ -1662,25 +1662,25 @@ LaTeX Font Info:    Calculating math sizes for size <35.83> on input line 74.
 <unit-memory.png, id=40, 312.41719pt x 29.35968pt>
 File: unit-memory.png Graphic file (type png)
 <use unit-memory.png>
-Package luatex.def Info: unit-memory.png  used on input line 32.
+Package luatex.def Info: unit-memory.png  used on input line 38.
 (luatex.def)             Requested size: 717.87038pt x 67.47113pt.
 <structure-memory.png, id=41, 313.9228pt x 18.0675pt>
 File: structure-memory.png Graphic file (type png)
 <use structure-memory.png>
-Package luatex.def Info: structure-memory.png  used on input line 64.
+Package luatex.def Info: structure-memory.png  used on input line 70.
 (luatex.def)             Requested size: 717.87038pt x 41.32222pt.
 <framework.png, id=42, 596.98032pt x 417.05812pt>
 File: framework.png Graphic file (type png)
 <use framework.png>
-Package luatex.def Info: framework.png  used on input line 128.
+Package luatex.def Info: framework.png  used on input line 134.
 (luatex.def)             Requested size: 717.87038pt x 501.54272pt.
 <money.png, id=43, 194.22563pt x 210.03468pt>
 File: money.png Graphic file (type png)
 <use money.png>
-Package luatex.def Info: money.png  used on input line 154.
+Package luatex.def Info: money.png  used on input line 160.
 (luatex.def)             Requested size: 717.87038pt x 776.44954pt.
 
-Overfull \hbox (43.79999pt too wide) in paragraph at lines 154--155
+Overfull \hbox (43.79999pt too wide) in paragraph at lines 160--161
  [] 
  []
 
@@ -1703,14 +1703,14 @@ Package rerunfilecheck Info: File `poster.out' has not changed.
 
 Here is how much of LuaTeX's memory you used:
  47562 strings out of 477805
- 305228,1648299 words of node,token memory allocated
- 75353 words of node memory still in use:
-   516 hlist, 45 vlist, 114 rule, 422 disc, 77 local_par, 48 math, 1931 glue, 88
-4 kern, 219 penalty, 5598 glyph, 1008 attribute, 88 glue_spec, 1008 attribute_li
-st, 4 write, 160 pdf_literal, 248 pdf_colorstack, 4 pdf_setmatrix, 4 pdf_save, 4
- pdf_restore nodes
-   avail lists: 2:411,3:1160,4:843,5:2711,6:240,7:23401,8:40,9:2079,10:18,11:128
-8
+ 381545,1648299 words of node,token memory allocated
+ 84351 words of node memory still in use:
+   535 hlist, 45 vlist, 114 rule, 486 disc, 79 local_par, 48 math, 2119 glue, 10
+00 kern, 227 penalty, 6479 glyph, 1014 attribute, 88 glue_spec, 1014 attribute_l
+ist, 4 write, 160 pdf_literal, 248 pdf_colorstack, 4 pdf_setmatrix, 4 pdf_save, 
+4 pdf_restore nodes
+   avail lists: 1:1,2:411,3:1184,4:843,5:3059,6:246,7:26608,8:40,9:2136,10:18,11
+:1480
  66181 multiletter control sequences out of 65536+600000
  147 fonts using 19509991 bytes
  128i,22n,115p,726b,1164s stack positions out of 5000i,500n,10000p,200000b,80000s
@@ -1721,7 +1721,7 @@ st, 4 write, 160 pdf_literal, 248 pdf_colorstack, 4 pdf_setmatrix, 4 pdf_save, 4
 hare/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi12.pfb></usr/share/te
 xlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb></usr/share/texlive/te
 xmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb>
-Output written on poster.pdf (1 page, 127597 bytes).
+Output written on poster.pdf (1 page, 128628 bytes).
 
 PDF statistics: 95 PDF objects out of 1000 (max. 8388607)
  49 compressed objects within 1 object stream
